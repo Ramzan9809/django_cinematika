@@ -1,13 +1,74 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Film
+from .models import Film, Genre, Director
 from .serializer import (FilmListSerializer,
                           FilmDetailSerializer,
-                          FilmValidateSerializer)
+                          FilmValidateSerializer,
+                          GenreSerializer,
+                          DirectorSerializer)
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.viewsets import ModelViewSet
 
 
-@api_view(['GET', 'PUT', 'DELETE'])
+class FilmListCreateAPIView(ListCreateAPIView):
+    queryset = Film.objects.select_related('director').prefetch_related('reviews', 'genres').all()
+    serializer_class = FilmListSerializer
+
+    def create(self, request, *args, **kwargs):
+        # step 0: Validation (Existing, Typing, Extra)
+        serializer = FilmValidateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                status=status.HTTP_400_BAD_REQUEST,
+                data=serializer.errors
+            )
+
+        # step 1: Receive data from ValidatedData
+        title = serializer.validated_data.get('title')
+        text = serializer.validated_data.get('text')
+        rating_kp = serializer.validated_data.get('rating_kp')
+        is_active = serializer.validated_data.get('is_active')
+        director_id = serializer.validated_data.get('director_id')
+        genres = serializer.validated_data.get('genres')
+
+        # step 2: Create film by received data
+        film = Film.objects.create(
+            title=title,
+            text=text,
+            rating_kp=rating_kp,
+            is_active=is_active,
+            director_id=director_id
+        )
+        film.genres.set(genres)
+        film.save()
+
+        # step 3: Return response (status=201, data=optional)
+        return Response(status=status.HTTP_201_CREATED,
+                        data=FilmDetailSerializer(film).data)
+
+
+class DirectorViewSet(ModelViewSet):
+    queryset = Director.objects.all()
+    serializer_class = DirectorSerializer
+    lookup_field = 'id'
+    pagination_class = PageNumberPagination
+
+
+class GenreListAPIView(ListCreateAPIView):  # list create
+    queryset = Genre.objects.all()  # List of objects from DB
+    serializer_class = GenreSerializer  # Class serializer inherited by ModelSerializer
+    pagination_class = PageNumberPagination
+
+
+class GenreDetailAPIView(RetrieveUpdateDestroyAPIView):  # retrieve update destroy
+    queryset = Genre.objects.all()  # List of objects from DB
+    serializer_class = GenreSerializer  # Class serializer inherited by ModelSerializer
+    lookup_field = 'id'
+
+
+@api_view(['GET', 'PUT', 'DELETE'])  # GET->retrieve, PUT->update, DELETE->destroy
 def film_detail_api_view(request, id):
     try:
         film = Film.objects.get(id=id)
@@ -37,7 +98,7 @@ def film_detail_api_view(request, id):
     elif request.method == 'DELETE':
         film.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
+
 
 @api_view(http_method_names=['GET', 'POST'])  # GET->list, POST->create
 def film_list_create_api_view(request):
@@ -49,14 +110,13 @@ def film_list_create_api_view(request):
         # step 2: Serialize queryset to list of dictionaries
         data = FilmListSerializer(films, many=True).data
 
-     # step 3: Return response
+        # step 3: Return response
         return Response(
             data=data,  # dictionary, list, list of dictionaries
             status=status.HTTP_200_OK  # status = int
         )
     elif request.method == 'POST':
-        # step 1: Receive data from RequestBody
-         # step 0: Validation (Existing, Typing, Extra)
+        # step 0: Validation (Existing, Typing, Extra)
         serializer = FilmValidateSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(

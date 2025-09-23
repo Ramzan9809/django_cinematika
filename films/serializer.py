@@ -1,7 +1,14 @@
 from rest_framework import serializers
-from .models import Film, Director, Review
+from .models import Film, Director, Review, Genre
 from rest_framework.exceptions import ValidationError
 from django.contrib.auth.models import User
+
+
+
+class GenreSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Genre
+        fields = '__all__'
 
 
 class ReviewSerializer(serializers.ModelSerializer):
@@ -13,7 +20,7 @@ class ReviewSerializer(serializers.ModelSerializer):
 class DirectorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Director
-        fields = 'id fio age'.split()
+        fields = 'id fio age birthday'.split()
 
 
 class FilmDetailSerializer(serializers.ModelSerializer):
